@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trình xử lý tệp Excel</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS library for reading/writing Excel files -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- FileSaver.js for saving the generated file -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Apply the Inter font to the body */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Style for the file drop zone */
+        .drop-zone {
+            transition: background-color 0.2s ease-in-out;
+        }
+        .drop-zone-over {
+            background-color: #e0e7ff; /* A light indigo color for hover state */
+            border-color: #4f46e5; /* A darker indigo for the border */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+
+    <div class="bg-white p-6 sm:p-8 rounded-xl shadow-lg max-w-lg w-full">
+        <!-- Header Section -->
+        <div class="text-center mb-6">
+            <h1 class="text-2xl font-bold text-gray-800">Trình xử lý tệp Excel</h1>
+            <p class="text-gray-500 mt-2">Định dạng lại tệp dữ liệu của bạn một cách nhanh chóng.</p>
+        </div>
+
+        <!-- Step 1: File Upload -->
+        <div class="mb-5">
+            <label class="block text-sm font-semibold text-gray-700 mb-2">1. Tải lên tệp dữ liệu</label>
+            <div id="drop-zone" class="drop-zone mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                <div class="space-y-1 text-center">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                        <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <div class="flex text-sm text-gray-600">
+                        <label for="file-upload" class="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500">
+                            <span>Chọn một tệp</span>
+                            <input id="file-upload" name="file-upload" type="file" class="sr-only" accept=".xlsx, .xls, .csv">
+                        </label>
+                        <p class="pl-1">hoặc kéo và thả vào đây</p>
+                    </div>
+                    <p id="file-name-display" class="text-xs text-gray-500">Chấp nhận tệp .xlsx, .xls, .csv</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2: Process Button -->
+        <div class="mb-5">
+             <label class="block text-sm font-semibold text-gray-700 mb-2">2. Bắt đầu xử lý</label>
+            <button id="process-btn" class="w-full bg-indigo-600 text-white py-3 px-4 rounded-md font-semibold hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200" disabled>
+                Xử lý tệp
+            </button>
+        </div>
+
+        <!-- Step 3: Download Button -->
+        <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">3. Tải về kết quả</label>
+            <button id="download-btn" class="w-full bg-green-600 text-white py-3 px-4 rounded-md font-semibold hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300 transform scale-0" style="transform-origin: top;">
+                Tải xuống tệp kết quả
+            </button>
+        </div>
+        
+        <!-- Status Message Area -->
+        <p id="status" class="text-center text-sm text-gray-600 mt-5 h-5"></p>
+    </div>
+
+    <script>
+        // Get references to the DOM elements
+        const fileUploadInput = document.getElementById('file-upload');
+        const processBtn = document.getElementById('process-btn');
+        const downloadBtn = document.getElementById('download-btn');
+        const statusDisplay = document.getElementById('status');
+        const fileNameDisplay = document.getElementById('file-name-display');
+        const dropZone = document.getElementById('drop-zone');
+
+        // Store the processed data for download
+        let processedBlob = null;
+        let originalFileName = '';
+
+        // --- Drag and Drop functionality ---
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault(); // Prevent default browser behavior
+            dropZone.classList.add('drop-zone-over');
+        });
+
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drop-zone-over');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drop-zone-over');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileUploadInput.files = files; // Assign dropped files to the input
+                handleFileSelect({ target: fileUploadInput }); // Trigger file handling
+            }
+        });
+
+        // --- Core Logic ---
+
+        // Add event listener for file selection
+        fileUploadInput.addEventListener('change', handleFileSelect);
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) {
+                return;
+            }
+
+            // Reset UI state
+            resetState();
+            
+            originalFileName = file.name;
+            fileNameDisplay.textContent = `Tệp đã chọn: ${file.name}`;
+            fileNameDisplay.classList.add('text-indigo-700', 'font-semibold');
+            statusDisplay.textContent = 'Tệp đã sẵn sàng. Nhấn nút "Xử lý tệp".';
+
+            // Enable the process button
+            processBtn.disabled = false;
+        }
+        
+        // Add event listener for the process button
+        processBtn.addEventListener('click', () => {
+            const file = fileUploadInput.files[0];
+            if (!file) {
+                statusDisplay.textContent = 'Lỗi: Vui lòng chọn một tệp trước.';
+                return;
+            }
+
+            // Disable buttons and show processing status
+            processBtn.disabled = true;
+            downloadBtn.classList.add('scale-0');
+            downloadBtn.classList.remove('scale-100');
+            statusDisplay.textContent = '⏳ Đang xử lý, vui lòng đợi...';
+
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+
+                    // --- DATA PROCESSING LOGIC ---
+                    
+                    // 1. Get the first sheet from the workbook
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+
+                    // 2. Convert sheet to JSON array (array of arrays)
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                    // 3. Flatten the array and filter for numbers between 1 and 80
+                    // .flat() handles data spread across multiple columns
+                    // First, convert all potential values to numbers. Non-numbers become NaN.
+                    // Then, filter out NaN and any numbers outside the 1-80 range.
+                    const numbers = jsonData
+                        .flat()
+                        .map(cell => Number(cell))
+                        .filter(num => !isNaN(num) && num >= 1 && num <= 80);
+
+                    // 4. Group numbers into chunks of 20
+                    const CHUNK_SIZE = 20;
+                    const resultData = [];
+                    for (let i = 0; i < numbers.length; i += CHUNK_SIZE) {
+                        const chunk = numbers.slice(i, i + CHUNK_SIZE);
+                        // Each chunk becomes a row in the new sheet
+                        resultData.push([chunk.join(' ')]); 
+                    }
+
+                    // --- EXCEL FILE GENERATION ---
+
+                    // 5. Create a new worksheet from the processed data
+                    const newWs = XLSX.utils.aoa_to_sheet(resultData);
+                    
+                    // Set column width to be wider
+                    newWs['!cols'] = [{ wch: 150 }]; 
+
+                    // 6. Create a new workbook and append the new sheet
+                    const newWb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(newWb, newWs, 'KetQua');
+
+                    // 7. Write the workbook to a binary array
+                    const wbout = XLSX.write(newWb, { bookType: 'xlsx', type: 'array' });
+
+                    // 8. Create a Blob for downloading
+                    processedBlob = new Blob([wbout], { type: 'application/octet-stream' });
+                    
+                    // Update UI to show success and enable download
+                    statusDisplay.textContent = '✅ Xử lý hoàn tất! Tệp của bạn đã sẵn sàng.';
+                    downloadBtn.classList.remove('scale-0');
+                    downloadBtn.classList.add('scale-100');
+                    processBtn.disabled = false; // Allow re-processing
+
+                } catch (error) {
+                    console.error("Processing error:", error);
+                    statusDisplay.textContent = '❌ Đã xảy ra lỗi khi xử lý tệp. Vui lòng kiểm tra định dạng tệp.';
+                    resetState();
+                }
+            };
+
+            reader.onerror = function() {
+                statusDisplay.textContent = '❌ Đã xảy ra lỗi khi đọc tệp.';
+                resetState();
+            };
+            
+            // Read the file as an ArrayBuffer
+            reader.readAsArrayBuffer(file);
+        });
+
+        // Add event listener for the download button
+        downloadBtn.addEventListener('click', () => {
+            if (processedBlob) {
+                // Use FileSaver.js to trigger the download
+                saveAs(processedBlob, 'ket_qua.xlsx');
+            } else {
+                statusDisplay.textContent = 'Lỗi: Không có dữ liệu để tải xuống.';
+            }
+        });
+
+        // Function to reset the UI to its initial state
+        function resetState() {
+            processBtn.disabled = true;
+            downloadBtn.classList.add('scale-0');
+            downloadBtn.classList.remove('scale-100');
+            processedBlob = null;
+            statusDisplay.textContent = '';
+            if (!originalFileName) {
+                 fileNameDisplay.textContent = 'Chấp nhận tệp .xlsx, .xls, .csv';
+                 fileNameDisplay.classList.remove('text-indigo-700', 'font-semibold');
+            }
+        }
+    </script>
+
+</body>
+</html>
