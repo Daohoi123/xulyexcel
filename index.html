@@ -63,11 +63,17 @@
                 Xử lý tệp
             </button>
         </div>
+        
+        <!-- Step 3: Preview Result -->
+        <div id="preview-section" class="mb-5 hidden">
+            <label for="preview-area" class="block text-sm font-semibold text-gray-700 mb-2">3. Xem trước kết quả</label>
+            <textarea id="preview-area" rows="6" class="w-full p-2 border border-gray-300 rounded-md bg-gray-50 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition" readonly></textarea>
+        </div>
 
-        <!-- Step 3: Download Button -->
-        <div>
-            <label class="block text-sm font-semibold text-gray-700 mb-2">3. Tải về kết quả</label>
-            <button id="download-btn" class="w-full bg-green-600 text-white py-3 px-4 rounded-md font-semibold hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300 transform scale-0" style="transform-origin: top;">
+        <!-- Step 4: Download Button -->
+        <div id="download-section" class="hidden">
+            <label class="block text-sm font-semibold text-gray-700 mb-2">4. Tải về kết quả</label>
+            <button id="download-btn" class="w-full bg-green-600 text-white py-3 px-4 rounded-md font-semibold hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
                 Tải xuống tệp kết quả
             </button>
         </div>
@@ -84,6 +90,9 @@
         const statusDisplay = document.getElementById('status');
         const fileNameDisplay = document.getElementById('file-name-display');
         const dropZone = document.getElementById('drop-zone');
+        const previewSection = document.getElementById('preview-section');
+        const previewArea = document.getElementById('preview-area');
+        const downloadSection = document.getElementById('download-section');
 
         // Store the processed data for download
         let processedBlob = null;
@@ -91,7 +100,7 @@
 
         // --- Drag and Drop functionality ---
         dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault(); // Prevent default browser behavior
+            e.preventDefault();
             dropZone.classList.add('drop-zone-over');
         });
 
@@ -105,35 +114,26 @@
             dropZone.classList.remove('drop-zone-over');
             const files = e.dataTransfer.files;
             if (files.length > 0) {
-                fileUploadInput.files = files; // Assign dropped files to the input
-                handleFileSelect({ target: fileUploadInput }); // Trigger file handling
+                fileUploadInput.files = files;
+                handleFileSelect({ target: fileUploadInput });
             }
         });
 
         // --- Core Logic ---
 
-        // Add event listener for file selection
         fileUploadInput.addEventListener('change', handleFileSelect);
 
         function handleFileSelect(event) {
             const file = event.target.files[0];
-            if (!file) {
-                return;
-            }
-
-            // Reset UI state
+            if (!file) return;
             resetState();
-            
             originalFileName = file.name;
             fileNameDisplay.textContent = `Tệp đã chọn: ${file.name}`;
             fileNameDisplay.classList.add('text-indigo-700', 'font-semibold');
             statusDisplay.textContent = 'Tệp đã sẵn sàng. Nhấn nút "Xử lý tệp".';
-
-            // Enable the process button
             processBtn.disabled = false;
         }
         
-        // Add event listener for the process button
         processBtn.addEventListener('click', () => {
             const file = fileUploadInput.files[0];
             if (!file) {
@@ -141,10 +141,9 @@
                 return;
             }
 
-            // Disable buttons and show processing status
             processBtn.disabled = true;
-            downloadBtn.classList.add('scale-0');
-            downloadBtn.classList.remove('scale-100');
+            previewSection.classList.add('hidden');
+            downloadSection.classList.add('hidden');
             statusDisplay.textContent = '⏳ Đang xử lý, vui lòng đợi...';
 
             const reader = new FileReader();
@@ -153,70 +152,53 @@
                 try {
                     const data = new Uint8Array(e.target.result);
                     const workbook = XLSX.read(data, { type: 'array' });
-
-                    // --- DATA PROCESSING LOGIC ---
                     
-                    // 1. Get the first sheet from the workbook
                     const firstSheetName = workbook.SheetNames[0];
                     const worksheet = workbook.Sheets[firstSheetName];
-
-                    // 2. Convert sheet to JSON array (array of arrays)
                     const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-                    // 3. Extract numbers column by column, then filter
                     const allCellsInOrder = [];
                     const numRows = jsonData.length;
-                    // Determine the maximum number of columns in the sheet
                     const numCols = jsonData.length > 0 ? Math.max(...jsonData.map(row => row ? row.length : 0)) : 0;
 
-                    // Iterate through columns first, then rows, to read data column by column
                     for (let j = 0; j < numCols; j++) {
                         for (let i = 0; i < numRows; i++) {
-                            // Ensure the row exists and has a cell at the current column index
                             if (jsonData[i] && jsonData[i][j] !== undefined && jsonData[i][j] !== null) {
                                 allCellsInOrder.push(jsonData[i][j]);
                             }
                         }
                     }
 
-                    // Now filter the collected cells for numbers between 1 and 80
                     const numbers = allCellsInOrder
                         .map(cell => Number(cell))
                         .filter(num => !isNaN(num) && num >= 1 && num <= 80);
 
-
-                    // 4. Group numbers into chunks of 20
                     const CHUNK_SIZE = 20;
                     const resultData = [];
                     for (let i = 0; i < numbers.length; i += CHUNK_SIZE) {
                         const chunk = numbers.slice(i, i + CHUNK_SIZE);
-                        // Each chunk becomes a row in the new sheet
                         resultData.push([chunk.join(' ')]); 
                     }
 
-                    // --- EXCEL FILE GENERATION ---
+                    // --- EXCEL FILE GENERATION & PREVIEW ---
 
-                    // 5. Create a new worksheet from the processed data
                     const newWs = XLSX.utils.aoa_to_sheet(resultData);
-                    
-                    // Set column width to be wider
                     newWs['!cols'] = [{ wch: 150 }]; 
-
-                    // 6. Create a new workbook and append the new sheet
                     const newWb = XLSX.utils.book_new();
                     XLSX.utils.book_append_sheet(newWb, newWs, 'KetQua');
-
-                    // 7. Write the workbook to a binary array
                     const wbout = XLSX.write(newWb, { bookType: 'xlsx', type: 'array' });
-
-                    // 8. Create a Blob for downloading
                     processedBlob = new Blob([wbout], { type: 'application/octet-stream' });
                     
-                    // Update UI to show success and enable download
-                    statusDisplay.textContent = '✅ Xử lý hoàn tất! Tệp của bạn đã sẵn sàng.';
-                    downloadBtn.classList.remove('scale-0');
-                    downloadBtn.classList.add('scale-100');
-                    processBtn.disabled = false; // Allow re-processing
+                    // Populate and show the preview area
+                    const previewText = resultData.map(row => row[0]).join('\n');
+                    previewArea.value = previewText;
+                    previewSection.classList.remove('hidden');
+
+                    // Show download section
+                    downloadSection.classList.remove('hidden');
+
+                    statusDisplay.textContent = '✅ Xử lý hoàn tất! Xem trước kết quả bên dưới.';
+                    processBtn.disabled = false;
 
                 } catch (error) {
                     console.error("Processing error:", error);
@@ -230,25 +212,22 @@
                 resetState();
             };
             
-            // Read the file as an ArrayBuffer
             reader.readAsArrayBuffer(file);
         });
 
-        // Add event listener for the download button
         downloadBtn.addEventListener('click', () => {
             if (processedBlob) {
-                // Use FileSaver.js to trigger the download
                 saveAs(processedBlob, 'ket_qua.xlsx');
             } else {
                 statusDisplay.textContent = 'Lỗi: Không có dữ liệu để tải xuống.';
             }
         });
 
-        // Function to reset the UI to its initial state
         function resetState() {
             processBtn.disabled = true;
-            downloadBtn.classList.add('scale-0');
-            downloadBtn.classList.remove('scale-100');
+            previewSection.classList.add('hidden');
+            downloadSection.classList.add('hidden');
+            previewArea.value = '';
             processedBlob = null;
             statusDisplay.textContent = '';
             if (!originalFileName) {
