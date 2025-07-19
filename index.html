@@ -163,14 +163,27 @@
                     // 2. Convert sheet to JSON array (array of arrays)
                     const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-                    // 3. Flatten the array and filter for numbers between 1 and 80
-                    // .flat() handles data spread across multiple columns
-                    // First, convert all potential values to numbers. Non-numbers become NaN.
-                    // Then, filter out NaN and any numbers outside the 1-80 range.
-                    const numbers = jsonData
-                        .flat()
+                    // 3. Extract numbers column by column, then filter
+                    const allCellsInOrder = [];
+                    const numRows = jsonData.length;
+                    // Determine the maximum number of columns in the sheet
+                    const numCols = jsonData.length > 0 ? Math.max(...jsonData.map(row => row ? row.length : 0)) : 0;
+
+                    // Iterate through columns first, then rows, to read data column by column
+                    for (let j = 0; j < numCols; j++) {
+                        for (let i = 0; i < numRows; i++) {
+                            // Ensure the row exists and has a cell at the current column index
+                            if (jsonData[i] && jsonData[i][j] !== undefined && jsonData[i][j] !== null) {
+                                allCellsInOrder.push(jsonData[i][j]);
+                            }
+                        }
+                    }
+
+                    // Now filter the collected cells for numbers between 1 and 80
+                    const numbers = allCellsInOrder
                         .map(cell => Number(cell))
                         .filter(num => !isNaN(num) && num >= 1 && num <= 80);
+
 
                     // 4. Group numbers into chunks of 20
                     const CHUNK_SIZE = 20;
